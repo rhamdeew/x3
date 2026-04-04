@@ -21,11 +21,29 @@ PASS = os.environ.get("PANEL_PASS", "admin")
 PATH = os.environ.get("PANEL_PATH", "/get")
 DB   = "/etc/x-ui/x-ui.db"
 
-# Xray config template — controls ONLY routing/outbounds/log.
-# Do NOT include api/inbounds/policy/stats — 3x-ui generates those itself.
+# Xray config template used as the full config base by 3x-ui.
+# IMPORTANT: must include api/inbounds[api]/policy/stats — 3x-ui merges user
+# inbounds into this template but does NOT inject its own api section on top.
+# 3x-ui adds user-created inbounds to the inbounds list at runtime.
 # Note: blackhole tag must be "blocked" (3x-ui default), not "block".
 XRAY_TEMPLATE = {
     "log": {"loglevel": "warning"},
+    "api": {
+        "tag": "api",
+        "services": ["HandlerService", "LoggerService", "StatsService"]
+    },
+    "policy": {
+        "levels": {
+            "0": {"statsUserDownlink": True, "statsUserUplink": True}
+        },
+        "system": {
+            "statsInboundDownlink": True,
+            "statsInboundUplink": True,
+            "statsOutboundDownlink": False,
+            "statsOutboundUplink": False
+        }
+    },
+    "stats": {},
     "routing": {
         "domainStrategy": "IPIfNonMatch",
         "rules": [
@@ -47,6 +65,16 @@ XRAY_TEMPLATE = {
             {"type": "field", "protocol": ["bittorrent"], "outboundTag": "direct"},
         ]
     },
+    "inbounds": [
+        # 3x-ui management API inbound — required for HandlerService on port 62789
+        {
+            "tag": "api",
+            "listen": "127.0.0.1",
+            "port": 62789,
+            "protocol": "tunnel",
+            "settings": {"address": "127.0.0.1"}
+        }
+    ],
     "outbounds": [
         {
             "tag": "direct",
