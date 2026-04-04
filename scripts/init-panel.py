@@ -21,14 +21,30 @@ PASS = os.environ.get("PANEL_PASS", "admin")
 PATH = os.environ.get("PANEL_PATH", "/get")
 DB   = "/etc/x-ui/x-ui.db"
 
-# Complete xray template — must include outbounds or 3x-ui panel JS breaks
+# Xray config template — controls ONLY routing/outbounds/log.
+# Do NOT include api/inbounds/policy/stats — 3x-ui generates those itself.
+# Note: blackhole tag must be "blocked" (3x-ui default), not "block".
 XRAY_TEMPLATE = {
     "log": {"loglevel": "warning"},
     "routing": {
         "domainStrategy": "IPIfNonMatch",
         "rules": [
-            {"type": "field", "domain": ["ru"], "outboundTag": "direct"},
-            {"type": "field", "ip": ["geoip:ru"],  "outboundTag": "direct"},
+            # 3x-ui management API — must be first
+            {"type": "field", "inboundTag": ["api"], "outboundTag": "api"},
+            # Block access to private/LAN IPs (SSRF protection)
+            {"type": "field", "ip": ["geoip:private"], "outboundTag": "blocked"},
+            # Block ads
+            {"type": "field", "domain": ["geosite:category-ads-all"], "outboundTag": "blocked"},
+            # YouTube — direct before any other matching
+            {"type": "field", "domain": [
+                "youtube.com", "youtubei.googleapis.com", "googlevideo.com",
+                "ytimg.com", "youtu.be", "ggpht.com", "gstatic.com"
+            ], "outboundTag": "direct"},
+            # Russia — direct (gov-ru + all .ru domains)
+            {"type": "field", "domain": ["geosite:category-gov-ru", "ru"], "outboundTag": "direct"},
+            {"type": "field", "ip": ["geoip:ru"], "outboundTag": "direct"},
+            # BitTorrent — direct (not blocked, just bypasses proxy chain)
+            {"type": "field", "protocol": ["bittorrent"], "outboundTag": "direct"},
         ]
     },
     "outbounds": [
@@ -38,12 +54,11 @@ XRAY_TEMPLATE = {
             "settings": {"domainStrategy": "AsIs", "redirect": "", "noises": []}
         },
         {
-            "tag": "block",
+            "tag": "blocked",
             "protocol": "blackhole",
-            "settings": {"response": {"type": "http"}}
+            "settings": {}
         }
-    ],
-    "stats": {}
+    ]
 }
 
 def set_setting(cur, key, value):
