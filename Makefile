@@ -12,7 +12,11 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 	@echo ""
-	@echo "Panel URL: https://localhost:$${PANEL_PORT:-2083}"
+	@if [ ! -f .env ]; then \
+		echo "  \033[33mFirst run:\033[0m cp .env.example .env && nano .env && make panel"; \
+	else \
+		echo "Panel URL: https://localhost:$${PANEL_PORT:-2083}"; \
+	fi
 
 # Auto-generate cert if missing (called as dependency)
 _ensure-cert:
