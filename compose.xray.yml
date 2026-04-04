@@ -1,0 +1,12 @@
+# Mode: standalone Xray (production)
+# Usage: make xray
+services:
+  relay:
+    image: ghcr.io/xtls/xray-core:latest
+    container_name: relay
+    volumes:
+      - ./db/:/etc/x-ui/
+      - ./cert/:/root/cert/
+    command: ["xray", "run", "-c", "/etc/x-ui/xray_config.json"]
+    network_mode: host
+    restart: unless-stopped
