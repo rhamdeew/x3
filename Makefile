@@ -11,7 +11,7 @@ PANEL_PATH ?= /get
 PANEL   := docker compose -f compose.yml
 XRAY    := docker compose -f compose.xray.yml
 
-.PHONY: help panel xray down logs status gen-cert gen-env init-panel init-routing _ensure-cert
+.PHONY: help panel xray down logs status gen-cert gen-env init-panel init-routing export _ensure-cert
 
 help: ## Show this help
 	@echo "Usage: make <target>"
@@ -32,6 +32,7 @@ _ensure-cert:
 	fi
 
 panel: down _ensure-cert ## Switch to 3x-ui panel mode (for reconfiguration)
+	@mkdir -p db
 	@FIRST_RUN=false; \
 	[ ! -f db/x-ui.db ] && FIRST_RUN=true; \
 	$(PANEL) up -d; \
@@ -52,8 +53,18 @@ panel: down _ensure-cert ## Switch to 3x-ui panel mode (for reconfiguration)
 	@echo "Panel: https://localhost:$(PANEL_PORT)$(PANEL_PATH)"
 	@echo "When done configuring, run: make xray"
 
-xray: ## Switch to standalone Xray (production mode)
-	@if [ ! -f db/xray_config.json ]; then \
+export: ## Export current 3x-ui xray config to db/xray_config.json
+	@if ! docker ps -q --filter name=overseer | grep -q .; then \
+		echo "ERROR: panel is not running. Start it first: make panel"; \
+		exit 1; \
+	fi
+	docker exec overseer cp /app/bin/config.json /etc/x-ui/xray_config.json
+	@echo "Exported to db/xray_config.json"
+
+xray: ## Export config from panel (if running) then switch to standalone Xray
+	@if docker ps -q --filter name=overseer | grep -q .; then \
+		$(MAKE) --no-print-directory export; \
+	elif [ ! -f db/xray_config.json ]; then \
 		echo "ERROR: db/xray_config.json not found."; \
 		echo "Run 'make panel' first, configure 3x-ui, then run 'make xray'."; \
 		exit 1; \

@@ -7,6 +7,9 @@ services:
     volumes:
       - ./db/:/etc/x-ui/
       - ./cert/:/root/cert/
-    command: ["xray", "run", "-c", "/etc/x-ui/xray_config.json"]
+    command: ["run", "-c", "/etc/x-ui/xray_config.json"]
+    cap_add:
+      - NET_BIND_SERVICE
+    user: "0"
     network_mode: host
     restart: unless-stopped
