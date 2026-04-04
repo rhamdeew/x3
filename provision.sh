@@ -19,7 +19,7 @@ fi
 echo "==> Installing Docker and vim..."
 
 apt-get update -qq
-apt-get install -y -qq ca-certificates curl vim
+apt-get install -y -qq ca-certificates curl vim git make
 
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
@@ -36,6 +36,7 @@ apt-get install -y -qq \
     docker-ce docker-ce-cli containerd.io \
     docker-buildx-plugin docker-compose-plugin
 
+systemctl enable --now docker.socket
 systemctl enable --now docker
 echo "    Docker $(docker --version | cut -d' ' -f3 | tr -d ',')"
 
@@ -48,6 +49,9 @@ else
     useradd --create-home --home-dir /srv/www --shell /bin/bash www
     echo "    Created user www with home /srv/www"
 fi
+
+usermod -aG docker www
+echo "    Added www to docker group"
 
 # Copy root authorized_keys
 ROOT_KEYS="${HOME}/.ssh/authorized_keys"
@@ -64,6 +68,19 @@ else
     echo "    WARNING: $ROOT_KEYS not found — www has no authorized_keys"
 fi
 
+# Generate SSH key for www if not present
+if [[ ! -f "$WWW_SSH/id_rsa" ]]; then
+    mkdir -p "$WWW_SSH"
+    ssh-keygen -t rsa -b 4096 -N "" -f "$WWW_SSH/id_rsa" -C "www@$(hostname)"
+    chown -R www:www "$WWW_SSH"
+    chmod 700 "$WWW_SSH"
+    chmod 600 "$WWW_SSH/id_rsa"
+    chmod 644 "$WWW_SSH/id_rsa.pub"
+    echo "    Generated SSH key: $WWW_SSH/id_rsa"
+else
+    echo "    SSH key already exists: $WWW_SSH/id_rsa"
+fi
+
 # ── 3. SSH port ───────────────────────────────────────────────────────────────
 echo "==> Reconfiguring SSH port..."
 
@@ -76,7 +93,19 @@ echo "Port $NEW_PORT" >> "$SSHD_CONFIG"
 
 # Validate config before restarting
 sshd -t
-systemctl restart ssh
+
+# Ubuntu 24 uses ssh.socket for socket activation — the socket owns the port,
+# so we must override it; restarting ssh.service alone has no effect.
+if systemctl cat ssh.socket &>/dev/null; then
+    mkdir -p /etc/systemd/system/ssh.socket.d
+    printf '[Socket]\nListenStream=\nListenStream=0.0.0.0:%s\nListenStream=[::]:%s\n' \
+        "$NEW_PORT" "$NEW_PORT" \
+        > /etc/systemd/system/ssh.socket.d/override.conf
+    systemctl daemon-reload
+    systemctl restart ssh.socket ssh.service
+else
+    systemctl restart ssh
+fi
 
 echo "    SSH port set to: $NEW_PORT"
 

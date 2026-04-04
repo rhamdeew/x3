@@ -7,12 +7,10 @@ services:
     volumes:
       - ./db/:/etc/x-ui/
       - ./cert/:/root/cert/
+      - ./scripts/:/scripts/
     environment:
       XRAY_VMESS_AEAD_FORCED: "false"
       XUI_ENABLE_FAIL2BAN: "true"
-      XUI_USERNAME: ${PANEL_USER:-admin}
-      XUI_PASSWORD: ${PANEL_PASS:-admin}
-      XUI_PORT: ${PANEL_PORT:-2083}
     tty: true
     network_mode: host
     restart: unless-stopped

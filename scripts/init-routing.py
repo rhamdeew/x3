@@ -13,7 +13,7 @@ import json
 import sys
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'db', 'x-ui.db')
+DB_PATH = "/etc/x-ui/x-ui.db"
 
 RU_DOMAIN_RULE = {
     "type": "field",
@@ -28,10 +28,9 @@ RU_IP_RULE = {
 }
 
 def main():
-    db_path = os.path.abspath(DB_PATH)
+    db_path = DB_PATH
     if not os.path.exists(db_path):
         print(f"ERROR: DB not found at {db_path}")
-        print("Start the panel first: make panel")
         sys.exit(1)
 
     con = sqlite3.connect(db_path)
@@ -87,7 +86,7 @@ def main():
     con.commit()
     con.close()
 
-    print("Done. Restart the panel to apply: make panel")
+    print("Done.")
 
 if __name__ == "__main__":
     main()

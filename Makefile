@@ -1,9 +1,17 @@
 .DEFAULT_GOAL := help
 
+-include .env
+export
+
+PANEL_PORT ?= 2083
+PANEL_USER ?= admin
+PANEL_PASS ?= admin
+PANEL_PATH ?= /get
+
 PANEL   := docker compose -f compose.yml
 XRAY    := docker compose -f compose.xray.yml
 
-.PHONY: help panel xray down logs status init-routing gen-cert init-cert _ensure-cert
+.PHONY: help panel xray down logs status gen-cert init-panel init-routing _ensure-cert
 
 help: ## Show this help
 	@echo "Usage: make <target>"
@@ -15,10 +23,9 @@ help: ## Show this help
 	@if [ ! -f .env ]; then \
 		echo "  \033[33mFirst run:\033[0m cp .env.example .env && nano .env && make panel"; \
 	else \
-		echo "Panel URL: https://localhost:$${PANEL_PORT:-2083}"; \
+		echo "Panel URL: https://localhost:$(PANEL_PORT)$(PANEL_PATH)"; \
 	fi
 
-# Auto-generate cert if missing (called as dependency)
 _ensure-cert:
 	@if [ ! -f cert/cert.pem ]; then \
 		$(MAKE) --no-print-directory gen-cert; \
@@ -33,12 +40,16 @@ panel: down _ensure-cert ## Switch to 3x-ui panel mode (for reconfiguration)
 		until [ -f db/x-ui.db ]; do printf "."; sleep 1; done; \
 		sleep 2; \
 		echo ""; \
-		python3 scripts/init-cert.py; \
-		python3 scripts/init-routing.py; \
+		docker exec \
+			-e PANEL_PORT=$(PANEL_PORT) \
+			-e PANEL_USER=$(PANEL_USER) \
+			-e PANEL_PASS=$(PANEL_PASS) \
+			-e PANEL_PATH=$(PANEL_PATH) \
+			overseer python3 /scripts/init-panel.py; \
 		$(PANEL) restart; \
 	fi
 	@echo ""
-	@echo "Panel: https://localhost:$${PANEL_PORT:-2083}"
+	@echo "Panel: https://localhost:$(PANEL_PORT)$(PANEL_PATH)"
 	@echo "When done configuring, run: make xray"
 
 xray: ## Switch to standalone Xray (production mode)
@@ -74,6 +85,23 @@ status: ## Show which mode is currently running
 		echo "Stopped. Use 'make panel' or 'make xray'."; \
 	fi
 
+gen-env: ## Generate .env with random credentials (keeps PORT and PATH from .env.example)
+	@if [ -f .env ]; then \
+		echo "ERROR: .env already exists. Remove it first."; \
+		exit 1; \
+	fi
+	@PANEL_USER=$$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 12); \
+	PANEL_PASS=$$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24); \
+	PANEL_PORT=$$(grep '^PANEL_PORT=' .env.example | cut -d= -f2); \
+	PANEL_PATH=$$(grep '^PANEL_PATH=' .env.example | cut -d= -f2); \
+	printf 'PANEL_USER=%s\nPANEL_PASS=%s\nPANEL_PORT=%s\nPANEL_PATH=%s\n' \
+		"$$PANEL_USER" "$$PANEL_PASS" "$$PANEL_PORT" "$$PANEL_PATH" > .env; \
+	echo "Generated .env:"; \
+	echo "  PANEL_USER=$$PANEL_USER"; \
+	echo "  PANEL_PASS=$$PANEL_PASS"; \
+	echo "  PANEL_PORT=$$PANEL_PORT"; \
+	echo "  PANEL_PATH=$$PANEL_PATH"
+
 gen-cert: ## Generate self-signed TLS cert for the panel into cert/
 	@mkdir -p cert
 	openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
@@ -84,18 +112,23 @@ gen-cert: ## Generate self-signed TLS cert for the panel into cert/
 	@echo ""
 	@echo "Cert generated: cert/cert.pem (valid 10 years)"
 
-init-cert: ## Manually apply SSL cert to existing 3x-ui DB, then restart panel
-	@if [ ! -f db/x-ui.db ]; then \
-		echo "ERROR: db/x-ui.db not found. Start panel first: make panel"; \
+init-panel: ## Re-apply all panel settings (port/user/pass/path/cert/routing) and restart
+	@if ! docker ps -q --filter name=overseer | grep -q .; then \
+		echo "ERROR: panel is not running. Start it first: make panel"; \
 		exit 1; \
 	fi
-	@python3 scripts/init-cert.py
+	docker exec \
+		-e PANEL_PORT=$(PANEL_PORT) \
+		-e PANEL_USER=$(PANEL_USER) \
+		-e PANEL_PASS=$(PANEL_PASS) \
+		-e PANEL_PATH=$(PANEL_PATH) \
+		overseer python3 /scripts/init-panel.py
 	@$(PANEL) restart
 
-init-routing: ## Manually apply Russia bypass routing to existing 3x-ui DB, then restart panel
-	@if [ ! -f db/x-ui.db ]; then \
-		echo "ERROR: db/x-ui.db not found. Start panel first: make panel"; \
+init-routing: ## Re-apply Russia bypass routing rules and restart panel
+	@if ! docker ps -q --filter name=overseer | grep -q .; then \
+		echo "ERROR: panel is not running. Start it first: make panel"; \
 		exit 1; \
 	fi
-	@python3 scripts/init-routing.py
+	docker exec overseer python3 /scripts/init-routing.py
 	@$(PANEL) restart
