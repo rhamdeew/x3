@@ -11,13 +11,13 @@ PANEL_PATH ?= /get
 PANEL   := docker compose -f compose.yml
 XRAY    := docker compose -f compose.xray.yml
 
-.PHONY: help panel xray down logs status gen-cert init-panel init-routing _ensure-cert
+.PHONY: help panel xray down logs status gen-cert gen-env init-panel init-routing _ensure-cert
 
 help: ## Show this help
 	@echo "Usage: make <target>"
 	@echo ""
 	@echo "Targets:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@if [ ! -f .env ]; then \

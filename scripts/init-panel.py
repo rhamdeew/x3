@@ -10,6 +10,7 @@ Reads from environment:
   PANEL_PATH  — URL base path (default: /get)
 """
 import sqlite3
+import json
 import os
 import subprocess
 import sys
@@ -20,18 +21,29 @@ PASS = os.environ.get("PANEL_PASS", "admin")
 PATH = os.environ.get("PANEL_PATH", "/get")
 DB   = "/etc/x-ui/x-ui.db"
 
-# ── Routing rules ──────────────────────────────────────────────────────────────
-import json
-
-RU_DOMAIN_RULE = {
-    "type": "field",
-    "domain": ["geosite:ru", "geosite:category-gov-ru"],
-    "outboundTag": "direct"
-}
-RU_IP_RULE = {
-    "type": "field",
-    "ip": ["geoip:ru"],
-    "outboundTag": "direct"
+# Complete xray template — must include outbounds or 3x-ui panel JS breaks
+XRAY_TEMPLATE = {
+    "log": {"loglevel": "warning"},
+    "routing": {
+        "domainStrategy": "IPIfNonMatch",
+        "rules": [
+            {"type": "field", "domain": ["ru"], "outboundTag": "direct"},
+            {"type": "field", "ip": ["geoip:ru"],  "outboundTag": "direct"},
+        ]
+    },
+    "outbounds": [
+        {
+            "tag": "direct",
+            "protocol": "freedom",
+            "settings": {"domainStrategy": "AsIs", "redirect": "", "noises": []}
+        },
+        {
+            "tag": "block",
+            "protocol": "blackhole",
+            "settings": {"response": {"type": "http"}}
+        }
+    ],
+    "stats": {}
 }
 
 def set_setting(cur, key, value):
@@ -40,38 +52,6 @@ def set_setting(cur, key, value):
         cur.execute("UPDATE settings SET value=? WHERE key=?", (value, key))
     else:
         cur.execute("INSERT INTO settings (key, value) VALUES (?,?)", (key, value))
-
-def apply_routing(cur):
-    cur.execute("SELECT value FROM settings WHERE key='xrayTemplateConfig'")
-    row = cur.fetchone()
-    config = {}
-    if row and row[0]:
-        try:
-            config = json.loads(row[0])
-        except json.JSONDecodeError:
-            pass
-
-    routing = config.get("routing", {"domainStrategy": "IPIfNonMatch", "rules": []})
-    rules   = routing.get("rules", [])
-    modified = False
-
-    if not any("geoip:ru" in str(r.get("ip", [])) for r in rules):
-        rules.insert(0, RU_IP_RULE)
-        modified = True
-        print("  routing: added geoip:ru → direct")
-
-    if not any("geosite:ru" in str(r.get("domain", [])) for r in rules):
-        rules.insert(0, RU_DOMAIN_RULE)
-        modified = True
-        print("  routing: added geosite:ru → direct")
-
-    if modified:
-        routing.setdefault("domainStrategy", "IPIfNonMatch")
-        routing["rules"] = rules
-        config["routing"] = routing
-        set_setting(cur, "xrayTemplateConfig", json.dumps(config))
-    else:
-        print("  routing: already configured")
 
 # ── 1. Port / username / password / basepath via x-ui CLI ─────────────────────
 print("Applying panel settings via x-ui CLI...")
@@ -90,7 +70,7 @@ if result.returncode != 0:
     print("ERROR: x-ui setting failed", file=sys.stderr)
     sys.exit(1)
 
-# ── 2. Cert + sub + routing via DB ────────────────────────────────────────────
+# ── 2. Cert + sub + xray template via DB ──────────────────────────────────────
 print("Applying DB settings...")
 con = sqlite3.connect(DB)
 cur = con.cursor()
@@ -102,7 +82,8 @@ print("  SSL cert configured")
 set_setting(cur, "subEnable", "false")
 print("  subscription service disabled")
 
-apply_routing(cur)
+set_setting(cur, "xrayTemplateConfig", json.dumps(XRAY_TEMPLATE))
+print("  xray template set (routing: .ru → direct)")
 
 con.commit()
 con.close()

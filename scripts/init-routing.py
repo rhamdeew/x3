@@ -17,7 +17,7 @@ DB_PATH = "/etc/x-ui/x-ui.db"
 
 RU_DOMAIN_RULE = {
     "type": "field",
-    "domain": ["geosite:ru", "geosite:category-gov-ru"],
+    "domain": ["ru"],
     "outboundTag": "direct"
 }
 
