@@ -2,7 +2,11 @@
 # Usage: make panel
 services:
   overseer:
-    image: ghcr.io/mhsanaei/3x-ui:latest
+    build:
+      context: ./docker/panel
+      args:
+        PROCESS_NAME: ${PROCESS_NAME:-nginx}
+    image: x3-panel:latest
     container_name: overseer
     volumes:
       - ./db/:/etc/x-ui/

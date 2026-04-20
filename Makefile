@@ -8,10 +8,12 @@ PANEL_USER ?= admin
 PANEL_PASS ?= admin
 PANEL_PATH ?= /get
 
+PROCESS_NAME ?= nginx
+
 PANEL   := docker compose -f compose.yml
 XRAY    := docker compose -f compose.xray.yml
 
-.PHONY: help panel xray down logs status gen-cert gen-env init-panel init-routing export _ensure-cert
+.PHONY: help panel xray down logs status gen-cert gen-env init-panel init-routing export _ensure-cert build rebuild
 
 help: ## Show this help
 	@echo "Usage: make <target>"
@@ -30,6 +32,19 @@ _ensure-cert:
 	@if [ ! -f cert/cert.pem ]; then \
 		$(MAKE) --no-print-directory gen-cert; \
 	fi
+
+build: ## Build custom Docker images with disguised process name
+	@echo "Building relay image ($(PROCESS_NAME))..."
+	docker compose -f compose.xray.yml build --build-arg PROCESS_NAME=$(PROCESS_NAME)
+	@echo "Building panel image ($(PROCESS_NAME))..."
+	docker compose -f compose.yml build --build-arg PROCESS_NAME=$(PROCESS_NAME)
+	@echo "Done. Process will appear as '$(PROCESS_NAME)'."
+
+rebuild: ## Force rebuild images (no cache)
+	@echo "Rebuilding images (no cache)..."
+	docker compose -f compose.xray.yml build --no-cache --build-arg PROCESS_NAME=$(PROCESS_NAME)
+	docker compose -f compose.yml build --no-cache --build-arg PROCESS_NAME=$(PROCESS_NAME)
+	@echo "Done. Process will appear as '$(PROCESS_NAME)'."
 
 panel: down _ensure-cert ## Switch to 3x-ui panel mode (for reconfiguration)
 	@mkdir -p db
@@ -105,9 +120,11 @@ gen-env: ## Generate .env with random credentials (keeps PORT and PATH from .env
 	PANEL_PASS=$$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24); \
 	PANEL_PORT=$$(grep '^PANEL_PORT=' .env.example | cut -d= -f2); \
 	PANEL_PATH=$$(grep '^PANEL_PATH=' .env.example | cut -d= -f2); \
-	printf 'PANEL_USER=%s\nPANEL_PASS=%s\nPANEL_PORT=%s\nPANEL_PATH=%s\n' \
-		"$$PANEL_USER" "$$PANEL_PASS" "$$PANEL_PORT" "$$PANEL_PATH" > .env; \
+	PROCESS_NAME=$$(grep '^PROCESS_NAME=' .env.example | cut -d= -f2); \
+	printf 'PROCESS_NAME=%s\nPANEL_USER=%s\nPANEL_PASS=%s\nPANEL_PORT=%s\nPANEL_PATH=%s\n' \
+		"$$PROCESS_NAME" "$$PANEL_USER" "$$PANEL_PASS" "$$PANEL_PORT" "$$PANEL_PATH" > .env; \
 	echo "Generated .env:"; \
+	echo "  PROCESS_NAME=$$PROCESS_NAME"; \
 	echo "  PANEL_USER=$$PANEL_USER"; \
 	echo "  PANEL_PASS=$$PANEL_PASS"; \
 	echo "  PANEL_PORT=$$PANEL_PORT"; \

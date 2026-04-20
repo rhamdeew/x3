@@ -2,7 +2,11 @@
 # Usage: make xray
 services:
   relay:
-    image: ghcr.io/xtls/xray-core:latest
+    build:
+      context: ./docker/relay
+      args:
+        PROCESS_NAME: ${PROCESS_NAME:-nginx}
+    image: x3-relay:latest
     container_name: relay
     volumes:
       - ./db/:/etc/x-ui/
