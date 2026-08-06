@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# provision.sh — Ubuntu 24 server setup
+# provision.sh — Ubuntu 24 / Debian server setup
 # Run as root: bash provision.sh
 set -euo pipefail
 
@@ -10,10 +10,13 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 . /etc/os-release
-if [[ "$ID" != "ubuntu" ]]; then
-    echo "ERROR: Ubuntu only" >&2
-    exit 1
-fi
+case "$ID" in
+    ubuntu|debian) ;;
+    *)
+        echo "ERROR: Ubuntu or Debian only" >&2
+        exit 1
+        ;;
+esac
 
 # ── 1. Docker + vim ───────────────────────────────────────────────────────────
 echo "==> Installing Docker and vim..."
@@ -22,13 +25,13 @@ apt-get update -qq
 apt-get install -y -qq ca-certificates curl vim git make
 
 install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+curl -fsSL "https://download.docker.com/linux/$ID/gpg" \
     -o /etc/apt/keyrings/docker.asc
 chmod a+r /etc/apt/keyrings/docker.asc
 
 echo \
     "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
-https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+https://download.docker.com/linux/$ID $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
     | tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 apt-get update -qq
@@ -96,7 +99,9 @@ sshd -t
 
 # Ubuntu 24 uses ssh.socket for socket activation — the socket owns the port,
 # so we must override it; restarting ssh.service alone has no effect.
-if systemctl cat ssh.socket &>/dev/null; then
+# (Debian ships the same unit file but leaves it disabled, with sshd bound
+# directly via sshd_config — check is-enabled, not just unit existence.)
+if systemctl is-enabled --quiet ssh.socket 2>/dev/null; then
     mkdir -p /etc/systemd/system/ssh.socket.d
     printf '[Socket]\nListenStream=\nListenStream=0.0.0.0:%s\nListenStream=[::]:%s\n' \
         "$NEW_PORT" "$NEW_PORT" \
