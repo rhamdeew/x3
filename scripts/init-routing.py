@@ -4,7 +4,7 @@ Pre-configure Russia bypass routing in 3x-ui database.
 Run after first 'make panel' start (so that x-ui.db is created).
 
 Rules applied:
-  - All *.ru domains and geosite:ru → direct
+  - All *.ru domains (domain:ru) → direct
   - All Russian IP ranges (geoip:ru) → direct
   - Everything else → proxy (default)
 """
@@ -17,7 +17,7 @@ DB_PATH = "/etc/x-ui/x-ui.db"
 
 RU_DOMAIN_RULE = {
     "type": "field",
-    "domain": ["ru"],
+    "domain": ["domain:ru"],
     "outboundTag": "direct"
 }
 
@@ -61,10 +61,10 @@ def main():
         print("Added geoip:ru → direct rule")
 
     # Add domain rule if not present
-    if not any("geosite:ru" in str(r.get("domain", [])) for r in rules):
+    if not any("domain:ru" in str(r.get("domain", [])) for r in rules):
         rules.insert(0, RU_DOMAIN_RULE)
         modified = True
-        print("Added geosite:ru → direct rule")
+        print("Added domain:ru → direct rule")
 
     if not modified:
         print("Routing rules already configured. Nothing to do.")
