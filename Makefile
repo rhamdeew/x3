@@ -57,10 +57,10 @@ panel: down _ensure-cert ## Switch to 3x-ui panel mode (for reconfiguration)
 		sleep 2; \
 		echo ""; \
 		docker exec \
-			-e PANEL_PORT=$(PANEL_PORT) \
-			-e PANEL_USER=$(PANEL_USER) \
-			-e PANEL_PASS=$(PANEL_PASS) \
-			-e PANEL_PATH=$(PANEL_PATH) \
+			-e PANEL_PORT \
+			-e PANEL_USER \
+			-e PANEL_PASS \
+			-e PANEL_PATH \
 			overseer python3 /scripts/init-panel.py; \
 		$(PANEL) restart; \
 	fi
@@ -146,10 +146,10 @@ init-panel: ## Re-apply all panel settings (port/user/pass/path/cert/routing) an
 		exit 1; \
 	fi
 	docker exec \
-		-e PANEL_PORT=$(PANEL_PORT) \
-		-e PANEL_USER=$(PANEL_USER) \
-		-e PANEL_PASS=$(PANEL_PASS) \
-		-e PANEL_PATH=$(PANEL_PATH) \
+		-e PANEL_PORT \
+		-e PANEL_USER \
+		-e PANEL_PASS \
+		-e PANEL_PATH \
 		overseer python3 /scripts/init-panel.py
 	@$(PANEL) restart
 
