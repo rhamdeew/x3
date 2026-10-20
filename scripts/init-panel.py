@@ -27,7 +27,17 @@ DB   = "/etc/x-ui/x-ui.db"
 # 3x-ui adds user-created inbounds to the inbounds list at runtime.
 # Note: blackhole tag must be "blocked" (3x-ui default), not "block".
 XRAY_TEMPLATE = {
-    "log": {"loglevel": "warning"},
+    # access must be "none": when omitted Xray writes the access log (client IP,
+    # destination, client email) to stdout, and 3x-ui copies every line into
+    # /var/log/x-ui/3xui.log at DEBUG, unrotated. Re-enable only for limitIp.
+    # maskAddress hides IPs that still appear in warning/error messages.
+    "log": {
+        "access": "none",
+        "error": "",
+        "loglevel": "warning",
+        "dnsLog": False,
+        "maskAddress": "half",
+    },
     "api": {
         "tag": "api",
         "services": ["HandlerService", "LoggerService", "StatsService"]
